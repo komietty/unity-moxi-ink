@@ -1,0 +1,21 @@
+﻿// moxi interface:
+// interface from flow to lbe
+// interface from lbe to flow
+#pragma kernel InterfaceF2L 
+#pragma kernel InterfaceL2F 
+#include "./Common.cginc"
+
+THREAD
+void InterfaceF2L(uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+    float4 velphi = VelPhi_R[uv];
+    VelPhi_W[uv] = float4(velphi.xy, Flow_R[uv].x, 1);
+}
+
+THREAD
+void InterfaceL2F(uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+    Flow_W[uv] = float4(VelPhi_R[uv].z, Flow_R[uv].yzw);
+}

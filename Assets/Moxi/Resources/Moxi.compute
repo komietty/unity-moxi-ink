@@ -1,0 +1,77 @@
+﻿#pragma kernel Deposition
+#pragma kernel Supply
+#pragma kernel Advection
+#pragma kernel Fixture
+#include "./Common.cginc"
+
+#define water_capacity       0.6 // 0.3 ~ 1
+#define base_hinderance      0.0
+#define hinderance_threshold 0.1 
+#define base_fixt_rate       0.01
+
+THREAD
+void Deposition (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+    float4 surf = Surf_R[uv];
+    float4 flow = Flow_R[uv];
+    bool supplied = is_supplied(uv);
+    surf.x = surf.x + supplied * _WtrSupply;
+    surf.y = surf.y + supplied * _InkSupply;
+
+    float1 wtr_s2f = clamp(surf.x, 0, water_capacity - flow.x);
+    float1 wtr_prv = flow.x;
+
+    Surf_W[uv] = float4(surf.x - wtr_s2f, surf.y, wtr_s2f, 1);
+    Flow_W[uv] = float4(flow.x + wtr_s2f, flow.y, wtr_prv, 1);
+}
+
+THREAD
+void Supply (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+    float4 surf = Surf_R[uv];
+    float4 flow = Flow_R[uv];
+    float1 ink_s2f  = surf.x > 0 ? surf.y * surf.z / surf.x : 0;
+    Surf_W[uv] = float4(surf.x, surf.y - ink_s2f, surf.z, 1);
+    Flow_W[uv] = float4(flow.x, flow.y + ink_s2f, flow.z, 1);
+}
+
+THREAD
+void Advection (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+    float4 flow = Flow_R[uv];
+    float1 cur = flow.y;
+    float1 alt = Flow_R[uv - ll].y * ForceV_R[uv].x + 
+                 Flow_R[uv - tt].y * ForceV_R[uv].y + 
+                 Flow_R[uv - rr].y * ForceV_R[uv].z + 
+                 Flow_R[uv - bb].y * ForceV_R[uv].w + 
+                 Flow_R[uv - tl].y * ForceD_R[uv].x + 
+                 Flow_R[uv - tr].y * ForceD_R[uv].y + 
+                 Flow_R[uv - br].y * ForceD_R[uv].z + 
+                 Flow_R[uv - bl].y * ForceD_R[uv].w;
+    float1 vel = length(VelPhi_R[uv].xy);
+    float1 hnd = lerp(1, base_hinderance, smoothstep(0, hinderance_threshold, vel));
+    float1 ink = lerp(alt, cur, hnd);
+    Flow_W[uv] = float4(flow.x, ink, flow.z, 1);
+}
+
+THREAD
+void Fixture (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+    float4 flow = Flow_R[uv];
+    float4 fixt = Fixt_R[uv];
+    float1 diff = flow.z - flow.x;
+    float1 fix_parm = 1 - smoothstep(0, saturate(flow.z), flow.x);
+    float1 fix_rate = diff > 0.03 ? saturate(diff / flow.z) : 0;
+    fix_rate = max(fix_rate * fix_parm, base_fixt_rate);
+
+    Fixt_W[uv] = float4(0, fixt.y + fix_rate * flow.y, 0, 1);
+    Flow_W[uv] = float4(flow.x, (1 - fix_rate) * flow.y, flow.z, 1);
+}

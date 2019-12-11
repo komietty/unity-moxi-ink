@@ -1,0 +1,52 @@
+﻿#pragma kernel Collision 
+#pragma kernel Streaming 
+#pragma kernel Simulation 
+#include "./Common.cginc"
+#define collision_weight_threshold 0.9
+#define evapolation_streaming      0.0005
+#define evapolation_simulation     0.01
+
+THREAD
+void Collision (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+    float4 velphi = VelPhi_R[uv];
+    float2 v = velphi.xy;
+    float1 p = velphi.z;
+    float1 w = smoothstep(0, collision_weight_threshold, p);
+    ForceV_W[uv] = lerp(ForceV_R[uv], (p.xxxx + w * feq4(ll, tt, rr, bb, v)) * one_9th,  _Omega);
+    ForceD_W[uv] = lerp(ForceD_R[uv], (p.xxxx + w * feq4(tl, tr, br, bl, v)) * one_36th, _Omega);
+    ForceR_W[uv] = lerp(ForceR_R[uv], (p      + w * feq1(ss, v)).xxxx        * four_9th, _Omega);
+}
+
+THREAD
+void Streaming (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+    float4 v = float4(ForceV_R[uv + ll].x, ForceV_R[uv + tt].y, ForceV_R[uv + rr].z, ForceV_R[uv + bb].w);
+    float4 d = float4(ForceD_R[uv + tl].x, ForceD_R[uv + tr].y, ForceD_R[uv + br].z, ForceD_R[uv + bl].w);
+    float4 r = float4(ForceR_R[uv + ss].x, 0, 0, 1);
+    float1 p = 1 - is_pinning(uv);
+
+    ForceV_W[uv] = p * lerp(v, ForceV_R[uv].wzyx, blocking_factor_avg(uv, ll, tt, rr, bb)); 
+    ForceD_W[uv] = p * lerp(d, ForceD_R[uv].wzyx, blocking_factor_avg(uv, tl, tr, br, bl)); 
+    ForceR_W[uv] = p * r;
+}
+
+THREAD
+void Simulation (uint3 id : SV_DispatchThreadID) {
+    uint2 uv = id.xy;
+    if(!condition(uv)) return;
+
+	float4 v = ForceV_R[uv];
+	float4 d = ForceD_R[uv];
+	float4 r = ForceR_R[uv];
+	float1 phi = r.x + v.x + v.y + v.z + v.w + d.x + d.y + d.z + d.w;
+	float2 vel = v.x * ll + v.y * tt + v.z * rr + v.w * bb 
+	           + d.x * tl + d.y * tr + d.z * br + d.w * bl;
+
+    phi -= is_pinning(uv) * evapolation_simulation;
+    VelPhi_W[uv] = float4(vel, phi, 1);
+}
