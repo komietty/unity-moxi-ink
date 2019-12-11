@@ -1,7 +1,7 @@
 # unity-moxi
 
 Lattice Boltzman Equation base ink simulation called Moxi implemented on Unity.
-The main thesis has a lot of parameters like other fluid simulation module, which makes very difficult for tuning. Compared to the algorithm in the thesis, this implementaion is slightly modified for simple, robust and easy for use.
+Compared to the algorithm in the thesis, this implementaion has less parameters and did slightly modified its algorithm aming it to be simple and robust for tuning.
 
 ![img](Imgs/CaptureA.PNG)
 
