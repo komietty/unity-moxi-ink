@@ -3,6 +3,7 @@
 Lattice Boltzman Equation base ink simulation called Moxi implemented on Unity.
 
 ![img](Imgs/CaptureA.PNG)
+![img](Imgs/dst.gif)
 
 ## Sources
 
